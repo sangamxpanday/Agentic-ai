@@ -46,29 +46,68 @@ st.sidebar.title("Langgraph Chatbot")
 if st.sidebar.button("New chat"):
     reset_chat()
 
-st.sidebar.header("my conversations")
+st.sidebar.header("My Conversations")
 
-for thread_id in st.session_state['chat_threads']:
-    messages = load_conversation(thread_id)
-    if not messages:
-        title=  "New Chat"
-    else:
-        title = chat_model.invoke(
-            f"provide a short title for the following conversastion: {messages}"
-        ).content
-    if st.sidebar.button(title):
-        st.session_state['thread_id'] = thread_id
-        messages = load_conversation(thread_id)
+# Helper function to safely create a label from UUID
+def get_thread_label(tid):
+    if not tid:
+        return "Unknown Chat"
+    # CRITICAL FIX: Convert UUID to string before slicing
+    return f"Chat {str(tid)[:8]}"
 
-        temp_messages = []
+# 1. Button for the CURRENT active thread (optional, or just highlight it)
+# Usually, you don't need a button for the current thread unless you want to reload it.
+# Instead, let's list ALL threads from chat_threads.
 
-        for message in messages:
-            if isinstance(message, HumanMessage):
-                temp_messages.append({'role': 'user', 'content': message.content})
-            elif isinstance(message, AIMessage):
-                temp_messages.append({'role': 'assistant', 'content': message.content})
+for tid in st.session_state['chat_threads']:
+    # Generate a unique key for each button using the string representation of the UUID
+    btn_key = f"thread_btn_{str(tid)}"
+    
+    # Create a friendly label
+    label = get_thread_label(tid)
+    
+    # Highlight the active thread
+    if tid == st.session_state['thread_id']:
+        label = f"✅ {label} (Active)"
+    
+    if st.sidebar.button(label, key=btn_key):
+        if tid != st.session_state['thread_id']:
+            st.session_state['thread_id'] = tid
+            # Load conversation
+            messages = load_conversation(tid)
+            
+            # Convert LangChain messages to dict for UI
+            temp_messages = []
+            for msg in messages:
+                if isinstance(msg, HumanMessage):
+                    temp_messages.append({'role': 'user', 'content': msg.content})
+                elif isinstance(msg, AIMessage):
+                    temp_messages.append({'role': 'assistant', 'content': msg.content})
+            
+            st.session_state['message_history'] = temp_messages
+            st.rerun() # Rerun to update UI immediately   
 
-        st.session_state['message_history'] = temp_messages
+# for thread_id in st.session_state['chat_threads']:
+#     messages = load_conversation(thread_id) 
+#     if not messages:
+#         title=  "New Chat"
+#     else:
+#         title = chat_model.invoke(
+#             f"provide a short title for the following conversastion: {messages}"
+#         ).content
+#     if st.sidebar.button(title):
+#         st.session_state['thread_id'] = thread_id
+#         messages = load_conversation(thread_id)
+
+#         temp_messages = []
+
+#         for message in messages:
+#             if isinstance(message, HumanMessage):
+#                 temp_messages.append({'role': 'user', 'content': message.content})
+#             elif isinstance(message, AIMessage):
+#                 temp_messages.append({'role': 'assistant', 'content': message.content})
+
+#         st.session_state['message_history'] = temp_messages
 
 #######################MAIN UI##########################
 
@@ -91,7 +130,15 @@ if user_input:
         st.text(user_input)
     # st.session_state['message_history'].append({'role': 'assistant', 'content': ai_message})
 
-    CONFIG = {'configurable': {'thread_id': st.session_state['thread_id']}}
+    #CONFIG = {'configurable': {'thread_id': st.session_state['thread_id']}}
+    
+    CONFIG = {
+        'configurable': {'thread_id': st.session_state['thread_id']},
+        'metadata': {
+            'thread_id': st.session_state['thread_id'],
+        },
+        "run_name": "chat_run",
+    }
 
     with st.chat_message('assistant'):
         ai_messages = st.write_stream(
